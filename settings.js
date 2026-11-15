@@ -17,6 +17,9 @@ export const DEFAULTS = {
   blur: 24,      // px
   dim: 0.12,     // assombrissement du fond d'écran
   radius: 26,    // px
+  dockBlur: 30,  // flou de la barre du bas (px)
+  dockGlass: 0.45, // opacité de la barre du bas
+  listSide: "left", // liste des notes / sujets sur ordinateur : left | right
   wallMode: "auto"
 };
 const LOCAL_ONLY = ["wallMode"];
@@ -48,6 +51,9 @@ export function applySettings() {
   r.style.setProperty("--blur", s.blur + "px");
   r.style.setProperty("--dim", s.dim);
   r.style.setProperty("--r", s.radius + "px");
+  r.style.setProperty("--dock-blur", s.dockBlur + "px");
+  r.style.setProperty("--dock-alpha", s.dockGlass);
+  r.dataset.side = s.listSide === "right" ? "right" : "left";
   if (s.wallMode === "custom" && customWall) r.style.setProperty("--wall-img", `url("${customWall}")`);
   else r.style.removeProperty("--wall-img");
   const m = document.querySelector('meta[name="theme-color"]');

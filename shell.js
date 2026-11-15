@@ -33,9 +33,42 @@ function show(tab) {
   if (tab === "community") load("community").then((m) => m.start());
   if (tab === "settings") load("settings").then((m) => m.render());
 }
-$("dock").addEventListener("click", (e) => {
+const dock = $("dock");
+const slot = () => { const r = dock.getBoundingClientRect(); return { left: r.left + 6, w: (r.width - 12) / 3 }; };
+const idxAt = (x) => { const s = slot(); return Math.max(0, Math.min(2, Math.floor((x - s.left) / s.w))); };
+const mark = (i) => [...dock.querySelectorAll("[data-tab]")].forEach((b, k) => b.classList.toggle("hot", k === i));
+let drag = null;
+dock.addEventListener("pointerdown", (e) => {
+  if (e.pointerType === "mouse" && e.button) return;
+  drag = { id: e.pointerId, x0: e.clientX, moved: false };
+});
+dock.addEventListener("pointermove", (e) => {
+  if (!drag || e.pointerId !== drag.id) return;
+  if (!drag.moved) {
+    if (Math.abs(e.clientX - drag.x0) < 6) return;
+    drag.moved = true;
+    dock.setPointerCapture(e.pointerId);
+    dock.classList.add("drag");
+    if (navigator.vibrate) navigator.vibrate(8);
+  }
+  const s = slot();
+  const f = Math.max(0, Math.min(2, (e.clientX - s.left) / s.w - 0.5));
+  dock.style.setProperty("--i", f);
+  const n = Math.round(f);
+  if (!dock.querySelector(".hot") || !dock.children[n + 1].classList.contains("hot")) { mark(n); if (navigator.vibrate) navigator.vibrate(4); }
+});
+const endDrag = (e) => {
+  if (!drag || e.pointerId !== drag.id) return;
+  const d = drag; drag = null;
+  dock.classList.remove("drag"); mark(-1);
+  if (e.type === "pointercancel" && !d.moved) return;
+  show(TABS[d.moved ? Math.round(parseFloat(dock.style.getPropertyValue("--i"))) : idxAt(e.clientX)]);
+};
+dock.addEventListener("pointerup", endDrag);
+dock.addEventListener("pointercancel", endDrag);
+dock.addEventListener("click", (e) => {            // clavier (Entrée / Espace)
   const b = e.target.closest("[data-tab]");
-  if (b) show(b.dataset.tab);
+  if (b && e.detail === 0) show(b.dataset.tab);
 });
 $("dock").addEventListener("keydown", (e) => {
   if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;

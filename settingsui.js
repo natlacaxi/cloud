@@ -36,6 +36,8 @@ function build() {
         <select id="sTheme" class="sel wide"><option value="auto">Automatique</option><option value="light">Clair</option><option value="dark">Sombre</option></select></div>
       <div class="field"><label>Couleur principale</label>
         <div class="swatches" id="sAccents"></div></div>
+      <div class="field"><label>Liste des notes et des sujets (ordinateur)</label>
+        <div class="seg" role="radiogroup"><button type="button" id="sideL" role="radio">À gauche</button><button type="button" id="sideR" role="radio">À droite</button></div></div>
     </section>
 
     <section class="gcard">
@@ -43,6 +45,8 @@ function build() {
       ${slider("sGlass", "Transparence du verre", 0, 90)}
       ${slider("sBlur", "Intensité du flou", 0, 60)}
       ${slider("sRadius", "Arrondis", 8, 40)}
+      ${slider("sDockGlass", "Transparence de la barre du bas", 0, 90)}
+      ${slider("sDockBlur", "Flou de la barre du bas", 0, 60)}
     </section>
 
     <section class="gcard">
@@ -92,6 +96,10 @@ function build() {
   bind("sBlur", "blur", (v) => v);
   bind("sRadius", "radius", (v) => v);
   bind("sDim", "dim", (v) => v / 100);
+  bind("sDockGlass", "dockGlass", (v) => +(1 - v / 100).toFixed(2));
+  bind("sDockBlur", "dockBlur", (v) => v);
+  $("sideL").onclick = () => { settings.listSide = "left"; saveSettings(); refresh(); };
+  $("sideR").onclick = () => { settings.listSide = "right"; saveSettings(); refresh(); };
   bind("sSize", "size", (v) => v);
 
   $("sWallAuto").onclick = () => { settings.wallMode = "auto"; saveSettings(); refresh(); };
@@ -128,7 +136,7 @@ function build() {
   };
 
   $("sReset").onclick = () => {
-    for (const k of ["theme", "accent", "glass", "blur", "dim", "radius", "wallMode"]) settings[k] = DEFAULTS[k];
+    for (const k of ["theme", "accent", "glass", "blur", "dim", "radius", "dockBlur", "dockGlass", "listSide", "wallMode"]) settings[k] = DEFAULTS[k];
     saveSettings(); refresh();
   };
   $("sOut").onclick = async () => { dispatchEvent(new Event("tc:before-signout")); await signOut(auth); };
@@ -149,8 +157,12 @@ function refresh(light = false) {
   $("sBlur").value = settings.blur; $("sBlurV").textContent = settings.blur + " px";
   $("sRadius").value = settings.radius; $("sRadiusV").textContent = settings.radius + " px";
   $("sDim").value = Math.round(settings.dim * 100); $("sDimV").textContent = $("sDim").value + " %";
+  $("sDockGlass").value = Math.round((1 - settings.dockGlass) * 100); $("sDockGlassV").textContent = $("sDockGlass").value + " %";
+  $("sDockBlur").value = settings.dockBlur; $("sDockBlurV").textContent = settings.dockBlur + " px";
   $("sSize").value = settings.size; $("sSizeV").textContent = settings.size + " px";
   if (light) return;
+  $("sideL").classList.toggle("on", settings.listSide !== "right"); $("sideR").classList.toggle("on", settings.listSide === "right");
+  $("sideL").setAttribute("aria-checked", String(settings.listSide !== "right")); $("sideR").setAttribute("aria-checked", String(settings.listSide === "right"));
   $("sTheme").value = settings.theme;
   $("sFont").value = settings.font;
   $("sAccentCustom").value = /^#[0-9a-f]{6}$/i.test(settings.accent) ? settings.accent : "#1f9d7a";

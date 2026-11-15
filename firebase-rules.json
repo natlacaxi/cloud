@@ -1,0 +1,90 @@
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "profiles": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.hasChild('name')",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40"
+        },
+        "photo": {
+          ".validate": "newData.isString() && newData.val().length <= 60000"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "community": {
+      "topics": {
+        ".indexOn": [
+          "lastAt"
+        ],
+        ".read": "auth != null",
+        "$tid": {
+          ".write": "auth != null && ((!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && !newData.exists() && data.child('uid').val() === auth.uid))",
+          ".validate": "newData.hasChildren(['title','uid','createdAt','lastAt'])",
+          "title": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 120"
+          },
+          "uid": {
+            ".validate": "newData.val() === (data.exists() ? data.val() : auth.uid)"
+          },
+          "name": {
+            ".validate": "newData.isString() && newData.val().length <= 40"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "lastAt": {
+            ".write": "auth != null",
+            ".validate": "newData.isNumber()"
+          },
+          "lastText": {
+            ".write": "auth != null",
+            ".validate": "newData.isString() && newData.val().length <= 200"
+          },
+          "lastName": {
+            ".write": "auth != null",
+            ".validate": "newData.isString() && newData.val().length <= 40"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      },
+      "messages": {
+        "$tid": {
+          ".read": "auth != null",
+          ".write": "auth != null && root.child('community/topics/' + $tid + '/uid').val() === auth.uid",
+          "$mid": {
+            ".write": "auth != null && ((!data.exists() && newData.child('uid').val() === auth.uid) || (data.exists() && !newData.exists() && data.child('uid').val() === auth.uid))",
+            ".validate": "newData.hasChildren(['uid','text','t']) && newData.child('uid').val() === auth.uid",
+            "text": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 2000"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 40"
+            },
+            "t": {
+              ".validate": "newData.isNumber()"
+            },
+            "uid": {
+              ".validate": "newData.isString()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        }
+      }
+    }
+  }
+}

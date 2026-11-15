@@ -1,7 +1,7 @@
 /* TalcoCloud : service worker. La version est mise à jour par tools/build.py */
-const CACHE = "talcocloud-8df327bf50";
+const CACHE = "talcocloud-c1abe430ed";
 const SHELL = ["./", "index.html", "style.css", "glass.css", "app.js", "shell.js", "firebase.js", "util.js", "settings.js", "profile.js",
-  "pwa.js", "community.js", "settingsui.js", "manifest.webmanifest", "favicon.svg", "favicon.png", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
+  "pwa.js", "viewport.js", "community.js", "settingsui.js", "manifest.webmanifest", "favicon.svg", "favicon.png", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
 const HOSTS = ["www.gstatic.com", "fonts.gstatic.com", "fonts.googleapis.com", "res.cloudinary.com"];
 
 self.addEventListener("install", (e) => {

@@ -15,6 +15,16 @@ let built = false, unTopics = null, unMsgs = [];
 let topics = {}, curId = null, last = { uid: null, t: 0, day: "" };
 let raf = 0, stick = true;
 
+const denied = (e) => e && (e.code === "PERMISSION_DENIED" || /permission[_ ]denied/i.test(e.message || ""));
+function fail(e, msg) {
+  console.error(e);
+  if (denied(e)) {
+    const b = $("cBanner");
+    b.textContent = "Firebase refuse l’accès : publie les règles du fichier firebase-rules.json (Realtime Database → Règles), puis recharge la page.";
+    b.hidden = false;
+  } else toast(msg);
+}
+
 function build() {
   if (built) return;
   built = true;
@@ -42,6 +52,7 @@ function build() {
       <h2>Community</h2>
       <button class="ib accent" id="cNewBtn" type="button" aria-label="Nouveau sujet" title="Nouveau sujet">${PLUS}</button>
     </header>
+    <p class="banner" id="cBanner" hidden role="alert"></p>
     <div class="searchwrap"><input id="cSearch" type="search" placeholder="Rechercher un sujet" aria-label="Rechercher un sujet"></div>
     <div class="list" id="cTopics"></div>
     <p class="muted list-empty" id="cNone" hidden>Aucun sujet pour l’instant. Lance le premier !</p>
@@ -76,6 +87,9 @@ function build() {
   const input = $("cInput");
   const grow = () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 140) + "px"; };
   input.addEventListener("input", grow);
+  const toBottom = () => { const b = $("cMsgs"); b.scrollTop = b.scrollHeight; };
+  input.addEventListener("focus", () => setTimeout(toBottom, 350));
+  addEventListener("tc:vv", () => { if (document.activeElement === input) toBottom(); });
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && matchMedia("(pointer: fine)").matches) { e.preventDefault(); $("cForm").requestSubmit(); }
   });
@@ -91,8 +105,8 @@ export function start() {
   build();
   if (unTopics) return;
   const q = query(ref(db, "community/topics"), orderByChild("lastAt"), limitToLast(100));
-  unTopics = onValue(q, (s) => { topics = s.val() || {}; renderTopics(); syncHeader(); },
-    () => toast("Impossible de charger la communauté (vérifie les règles Firebase)."));
+  unTopics = onValue(q, (s) => { $("cBanner").hidden = true; topics = s.val() || {}; renderTopics(); syncHeader(); },
+    (e) => fail(e, "Impossible de charger la communauté."));
 }
 
 export function stop() {
@@ -144,7 +158,7 @@ async function createTopic(title, first) {
     });
     topics[r.key] = t;
     openTopic(r.key);
-  } catch { toast("Publication impossible. Réessaie."); }
+  } catch (e) { delete topics[r.key]; renderTopics(); fail(e, "Publication impossible. Réessaie."); }
 }
 
 async function deleteTopic() {
@@ -156,7 +170,7 @@ async function deleteTopic() {
   try {
     await remove(ref(db, `community/messages/${id}`));
     await remove(ref(db, `community/topics/${id}`));
-  } catch { toast("Suppression impossible."); }
+  } catch (e) { fail(e, "Suppression impossible."); }
 }
 
 /* ---------- Conversation ---------- */
@@ -238,5 +252,5 @@ async function send() {
       [`community/topics/${curId}/lastText`]: text.slice(0, 120),
       [`community/topics/${curId}/lastName`]: name
     });
-  } catch { input.value = text; toast("Message non envoyé. Réessaie."); }
+  } catch (e) { input.value = text; fail(e, "Message non envoyé. Réessaie."); }
 }
