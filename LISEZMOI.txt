@@ -1,0 +1,4 @@
+LOGIN COMMUN — TalcoCloud (depot "cloud" -> https://natlacaxi.github.io/cloud/)
+index.html est identique a celui d'Exchange ; seuls service.json, icones, manifest et legal.html different.
+Voir exchange-3-login/LISEZMOI.txt pour le fonctionnement. Guide complet : firebase-prive.zip > GUIDE_A_Z.txt.
+legal.html est repris d'Exchange avec le nom TalcoCloud : a relire.
