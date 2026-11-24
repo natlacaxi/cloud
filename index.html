@@ -191,7 +191,7 @@ const authErr = e => ({
   "auth/invalid-credential": "Identifiants incorrects.", "auth/wrong-password": "Identifiants incorrects.", "auth/user-not-found": "Identifiants incorrects.",
   "auth/invalid-email": "Adresse e-mail invalide.", "auth/email-already-in-use": "Cette adresse e-mail est déjà utilisée.", "auth/weak-password": "Mot de passe trop faible.",
   "auth/too-many-requests": "Trop de tentatives. Réessayez dans quelques minutes.", "auth/network-request-failed": "Problème de réseau. Vérifiez votre connexion."
-})[e && e.code] || (e && e.userMessage) || ("Une erreur est survenue (" + ((e && (e.code || e.message)) || "inconnue") + "). Réessayez.");
+})[e && e.code] || (e && e.userMessage) || ("Une erreur est survenue (" + why(e) + "). Réessayez.");
 $("#tabs").addEventListener("click", e => {
   const b = e.target.closest("button[data-t]"); if (!b) return;
   document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x === b));
@@ -256,20 +256,39 @@ async function credsFor(uid, id, sso) {
   return { email: "x" + h + "@" + id + ".talco.invalid", key };
 }
 
+const st = async (label, f) => { try { return await f(); } catch (e) { if (e && typeof e === "object" && !e.step) e.step = label; throw e; } };
+const why = e => ((e && e.step) ? e.step + " — " : "") + ((e && (e.code || e.message)) || "erreur");
 /* Profils à créer sur le serveur d’un service (un par type de service). */
 const PROFILES = {
   async exchange({ db, uid, prof }) {
-    if ((await get(ref(db, "users/" + uid))).exists()) return;
     const id = prof.pseudo, name = (((prof.prenom || "") + " " + (prof.nom || "")).trim() || id).slice(0, 40);
-    const up = { ["users/" + uid]: { id, idLower: id, name, createdAt: serverTimestamp(), terms: 1 }, ["idIndex/" + id]: uid };
-    if (ADMINS.includes(id)) { const k = (await get(ref(db2, "config/adminKeys/exchange"))).val(); if (k) up["admins/" + uid] = k; }
-    await update(ref(db), up);
+    if (ADMINS.includes(id)) {
+      const k = await st("clé admin (itn-2 > config/adminKeys/exchange)", async () => (await get(ref(db2, "config/adminKeys/exchange"))).val());
+      if (!k) throw { step: "clé admin", code: "absente (importer itn-2_donnees_a_importer.json dans itn-2)" };
+      if (!(await st("lecture des droits admin", () => get(ref(db, "admins/" + uid)))).exists()) await st("droits admin (règles itn-3)", () => set(ref(db, "admins/" + uid), k));
+    }
+    if ((await st("lecture du profil", () => get(ref(db, "users/" + uid)))).exists()) return;
+    const owner = (await st("lecture de l’identifiant", () => get(ref(db, "idIndex/" + id)))).val();
+    if (owner && owner !== uid) throw { step: "identifiant déjà pris", code: "ancien compte « " + id + " » encore présent dans itn-3 : le supprimer depuis TalcoAdministration (ou supprimer les nœuds idIndex, users et admins d’itn-3)" };
+    if (owner !== uid) await st("identifiant (règles itn-3)", () => set(ref(db, "idIndex/" + id), uid));
+    await st("profil (règles itn-3)", () => set(ref(db, "users/" + uid), { id, idLower: id, name, createdAt: serverTimestamp(), terms: 1 }));
+  },
+  async map({ db, uid, prof }) {
+    if (ADMINS.includes(String(prof.pseudo).toLowerCase())) {
+      const k = await st("clé admin (itn-2 > config/adminKeys/map)", async () => (await get(ref(db2, "config/adminKeys/map"))).val());
+      if (!k) throw { step: "clé admin", code: "absente (importer itn-2_donnees_a_importer.json dans itn-2)" };
+      if (!(await get(ref(db, "admins/" + uid))).exists()) await st("droits admin (règles itn-5)", () => set(ref(db, "admins/" + uid), k));
+    }
+    if (!(await st("lecture du profil", () => get(ref(db, "users/" + uid)))).exists())
+      await st("profil (règles itn-5)", () => set(ref(db, "users/" + uid), { pseudo: String(prof.pseudo).slice(0, 20), createdAt: serverTimestamp() }));
   },
   async cloud({ db, uid, prof }) {
-    if (!(await get(ref(db, "profiles/" + uid))).exists()) await update(ref(db), { ["profiles/" + uid]: { name: String(prof.pseudo).slice(0, 40) } });
+    if (!(await st("lecture du profil", () => get(ref(db, "profiles/" + uid)))).exists())
+      await st("profil (règles itn-4)", () => set(ref(db, "profiles/" + uid), { name: String(prof.pseudo).slice(0, 40) }));
     if (ADMINS.includes(prof.pseudo)) {
-      const k = (await get(ref(db2, "config/adminKeys/cloud"))).val();
-      if (k) { try { await set(ref(db, "admins/" + uid), k); } catch (e) {} }
+      const k = await st("clé admin (itn-2 > config/adminKeys/cloud)", async () => (await get(ref(db2, "config/adminKeys/cloud"))).val());
+      if (!k) throw { step: "clé admin", code: "absente (importer itn-2_donnees_a_importer.json dans itn-2)" };
+      if (!(await get(ref(db, "admins/" + uid))).exists()) await st("droits admin (règles itn-4)", () => set(ref(db, "admins/" + uid), k));
     }
   }
 };
@@ -280,7 +299,10 @@ async function provisionService(id, svc, prof, creds) {
   try { cred = await signInWithEmailAndPassword(a, creds.email, creds.key); }
   catch (e) {
     if (!/user-not-found|invalid-credential|invalid-login/.test(e?.code || "")) throw e;
-    cred = await createUserWithEmailAndPassword(a, creds.email, creds.key);
+    try { cred = await createUserWithEmailAndPassword(a, creds.email, creds.key); }
+    catch (e2) {                                         // créé entre-temps par une autre ouverture : on se reconnecte
+      if (e2 && e2.code === "auth/email-already-in-use") cred = await signInWithEmailAndPassword(a, creds.email, creds.key); else throw e2;
+    }
   }
   const h = PROFILES[svc.profile];
   if (h) await h({ db: getDatabase(app), uid: cred.user.uid, prof });
@@ -296,18 +318,18 @@ async function enter(u) {
   show("splash");
   try {
     setStep("lecture du compte…");
-    const pS = await get(ref(db2, "users/" + u.uid));
+    const pS = await st("lecture du compte (itn-2 users)", () => get(ref(db2, "users/" + u.uid)));
     isAdminUser = pS.exists() && ADMINS.includes(pS.val().pseudo);
     if (pS.exists() && suspended && !isAdminUser) { started = true; showSusp(false); return; }
     setStep("lecture du service…");
-    const [sS, ssoS] = await Promise.all([get(ref(db2, "services/" + SVC.id)), get(ref(db2, "users/" + u.uid + "/sso"))]);
+    const [sS, ssoS] = await Promise.all([st("lecture du service (itn-2 services/" + SVC.id + ")", () => get(ref(db2, "services/" + SVC.id))), st("lecture des accès (itn-2 users/sso)", () => get(ref(db2, "users/" + u.uid + "/sso")))]);
     if (!pS.exists()) { await signOut(a2); show("login"); return msg("Compte incomplet. Recréez votre compte avec un code d’invitation valide."); }
     const svc = sS.val(), sso = ssoS.val() || {};
     if (!svc || !svc.url) { show("login"); return msg("Ce service n’est pas disponible pour le moment."); }
     setStep("préparation de l’accès…");
-    const creds = await credsFor(u.uid, SVC.id, sso);
+    const creds = await st("clé d’accès au service (itn-2 users/sso)", () => credsFor(u.uid, SVC.id, sso));
     if (!sso[SVC.id]) setStep("création du compte du service…");
-    if (!sso[SVC.id]) await provisionService(SVC.id, svc, pS.val(), creds);
+    if (!sso[SVC.id]) await st("compte du service", () => provisionService(SVC.id, svc, pS.val(), creds));
     ctx = { u, svc, prof: pS.val(), creds };
     IORIGIN = new URL(svc.url).origin; expected = creds.email; sent = false; recovered = false;
     clearTimeout(readyT); readyT = setTimeout(recover, 15000);
@@ -331,7 +353,7 @@ async function recover() {                      // une seule tentative de répar
   if (recovered || !ctx) { if (!frame.classList.contains("on")) { show("login"); msg("Le service ne répond pas. Réessayez." + (lastErr ? " (" + lastErr + ")" : "")); } return; }
   recovered = true;
   try { await provisionService(SVC.id, ctx.svc, ctx.prof, ctx.creds); sent = true; sendLogin(); readyT = setTimeout(recover, 12000); }
-  catch (e) { lastErr = "compte du service : " + (e.code || e.message || "erreur"); show("login"); msg("Le service ne répond pas. Réessayez. (" + lastErr + ")"); }
+  catch (e) { lastErr = "compte du service : " + why(e); show("login"); msg("Le service ne répond pas. Réessayez. (" + lastErr + ")"); }
 }
 addEventListener("message", async e => {
   if (!IORIGIN || e.origin !== IORIGIN || e.source !== frame.contentWindow) return;
